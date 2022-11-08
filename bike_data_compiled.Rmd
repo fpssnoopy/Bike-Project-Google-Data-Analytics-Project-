@@ -1,0 +1,145 @@
+---
+title: "Bike_data_analysis"
+author: "Brian Leslie"
+date: '2022-11-08'
+output: pdf_document
+---
+
+### We start by importing the packages we need
+
+```{r}
+library(tidyverse)  # Helps wrangle data
+library(lubridate)  # Helps wrangle date attributes
+library(ggplot2)  # Helps visualize data
+library(dplyr)   # Helps manipulate data
+library(readr)    # Helps read csv files
+```
+
+### Preparing Our Data
+
+```{r}
+setwd("c:/Users/bsoxl/OneDrive/Documents")
+X202110 <- read_csv("bike_data/202110-divvy-tripdata.csv")
+X202111 <- read_csv("bike_data/202111-divvy-tripdata.csv")
+X202112 <- read_csv("bike_data/202112-divvy-tripdata.csv")
+X202201 <- read_csv("bike_data/202201-divvy-tripdata.csv")
+X202202 <- read_csv("bike_data/202202-divvy-tripdata.csv")
+X202203 <- read_csv("bike_data/202203-divvy-tripdata.csv")
+X202204 <- read_csv("bike_data/202204-divvy-tripdata.csv")
+X202205 <- read_csv("bike_data/202205-divvy-tripdata.csv")
+X202206 <- read_csv("bike_data/202206-divvy-tripdata.csv")
+X202207 <- read_csv("bike_data/202207-divvy-tripdata.csv")
+X202208 <- read_csv("bike_data/202208-divvy-tripdata.csv")
+X202209 <- read_csv("bike_data/202209-divvy-publictripdata.csv")
+
+year_data <- rbind(X202110,X202111,X202112,X202201,X202202,X202203,
+ X202204,X202205,X202206,X202207,X202208,X202209)
+View(year_data) # Combined data tables together
+colnames(year_data) # List of column names
+nrow(year_data)  # Shows number of rows
+dim(year_data)   # Dimensions of the data frame
+str(year_data)   # Shows data types of columns
+summary(year_data) # Statistical suummary of data
+year_data <- year_data %>%
+  mutate(member_casual = recode(member_casual
+                                ,"Subscriber"="member"
+                                ,"Customer"="casual"))
+
+```
+
+### Cleaning and Processing Our Data
+
+##### The data appears to have already been cleaned regarding the member
+
+##### status column since no rows were removed.
+
+```{r}
+table(year_data$member_casual) #only two variables
+```
+
+##### Add columns that list the date, month, day, and year of each ride
+
+```{r}
+year_data$date <- as.Date(year_data$started_at)
+year_data$month <- format(as.Date(year_data$date), "%m")
+year_data$day <- format(as.Date(year_data$date), "%d")
+year_data$year <- format(as.Date(year_data$date), "%Y")
+year_data$day_of_week <-format(as.Date(year_data$date), "%A")
+```
+
+##### We will now add a ride_length column in seconds
+
+```{r}
+year_data$ride_length <- difftime(year_data$ended_at,year_data$started_at)
+summary(year_data$ride_length) #we need to convert from factor to numeric
+year_data$ride_length <- as.numeric(as.character(year_data$ride_length))
+is.numeric(year_data$ride_length)
+summary(year_data$ride_length) #we see a negative minimum, we need to clean
+year_data_v2 <- year_data[!(year_data$start_station_name =="HQ QR"|year_data$ride_length<0),]
+summary(year_data_v2$ride_length) # now we can describe the data will basic statistical analysis
+```
+
+### Analyzing Our Data
+
+```{r}
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual, FUN = mean)
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual, FUN = median)
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual, FUN = max)
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual, FUN = min)
+```
+
+##### See the average ride time by each day for members vs casual users
+
+```{r}
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual + year_data_v2$day_of_week, FUN = mean)
+```
+
+#####Now lets order the days
+
+```{r}
+year_data_v2$day_of_week <- ordered(year_data_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+aggregate(year_data_v2$ride_length ~ year_data_v2$member_casual + year_data_v2$day_of_week, FUN = mean)
+```
+
+##### Now lets find the average ride time by day by member status
+
+```{r}
+year_data_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% # Creates weekday field
+  group_by(member_casual, weekday) %>% # Groups by user type and day
+  summarise(number_of_rides=n() # Calculations
+            ,average_duration = mean(ride_length)) %>%
+  arrange(member_casual, weekday) # Sorting
+```
+
+##### Now we visualize number of rides by user type
+
+```{r}
+year_data_v2 %>%
+  mutate(weekday =wday(started_at, label = TRUE)) %>%
+  group_by(member_casual, weekday) %>%
+  summarise(number_of_rides=n()
+            ,average_duration=mean(ride_length)) %>%
+  arrange(member_casual, weekday) %>%
+  ggplot(aes(x=weekday,y=number_of_rides, fill=member_casual))+
+  geom_col(position="dodge")
+```
+
+##### Now lets compare trip duration by user type
+
+```{r}
+year_data_v2 %>%
+  mutate(weekday =wday(started_at, label = TRUE)) %>%
+  group_by(member_casual, weekday) %>%
+  summarise(number_of_rides=n()
+            ,average_duration=mean(ride_length)) %>%
+  arrange(member_casual, weekday) %>%
+  ggplot(aes(x=weekday,y=average_duration, fill=member_casual))+
+  geom_col(position="dodge")
+```
+
+##### Saving our new data frame
+
+```{r}
+write.csv(year_data_v2,"bike_data/.csv")
+```
